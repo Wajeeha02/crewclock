@@ -87,7 +87,7 @@ export default function LandingLogin({ onSupervisorLogin, onEmployeeLogin }: Lan
                 </div>
 
                 <div className="landing-footer-info">
-                    <span>⚡ CrewClock Geofenced Time & Location Tracking System</span>
+                    <span> CrewClock Geofenced Time & Location Tracking System</span>
                 </div>
             </div>
         </div>
