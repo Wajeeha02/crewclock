@@ -1,7 +1,7 @@
 // components/ClockPanel.tsx — On-Site & Field clock-in with GPS geofencing
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { JOBS, TASKS } from '../data/jobs';
+import { TASKS } from '../data/jobs';
 import type { Job } from '../data/jobs';
 import { diffMs, formatHMS, hoursDecimal } from '../utils/time';
 import { getCurrentPosition, haversineDistance } from '../hooks/useTimeEntries';
@@ -9,10 +9,10 @@ import type { TimeEntry } from '../hooks/useTimeEntries';
 
 type WorkType = 'onsite' | 'field';
 
-export default function ClockPanel({ entries, active, lastJob, clockIn, clockOut }: any) {
+export default function ClockPanel({ entries, active, lastJob, clockIn, clockOut, jobs = [] }: any) {
     const navigate = useNavigate();
-    const [jobId, setJobId] = useState(JOBS[0].id);
-    const [taskId, setTaskId] = useState(TASKS[0].id);
+    const [jobId, setJobId] = useState(jobs[0]?.id || 'j1');
+    const [taskId] = useState(TASKS[0].id);
     const [workType, setWorkType] = useState<WorkType>('onsite');
     const [, tick] = useState(0);
 
@@ -35,7 +35,7 @@ export default function ClockPanel({ entries, active, lastJob, clockIn, clockOut
     const recentEntries = entries.filter((e: any) => e.end && e.jobId !== 'break').slice(0, 3);
 
     const formatTime = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-    const getJobName = (jId: string) => JOBS.find((j: Job) => j.id === jId)?.name || 'Unknown';
+    const getJobName = (jId: string) => jobs.find((j: Job) => j.id === jId)?.name || 'Unknown';
     const getTaskName = (tId: string) => TASKS.find((t) => t.id === tId)?.name || 'Task';
 
     // ─── Clock-in flow with GPS ───────────────────────────────────────────────
@@ -62,7 +62,7 @@ export default function ClockPanel({ entries, active, lastJob, clockIn, clockOut
             lat = pos.lat;
             lng = pos.lng;
 
-            const job = JOBS.find((j: Job) => j.id === jobId);
+            const job = jobs.find((j: Job) => j.id === jobId);
             if (job) {
                 const dist = haversineDistance(lat, lng, job.lat, job.lng);
                 setDistanceFromSite(dist);
@@ -102,7 +102,7 @@ export default function ClockPanel({ entries, active, lastJob, clockIn, clockOut
     // ─── CLOCKED IN view ────────────────────────────────────────────────────
     if (active) {
         const isBreak = active.jobId === 'break';
-        const currentJob = JOBS.find((j: Job) => j.id === (isBreak ? lastJob?.jobId : active.jobId));
+        const currentJob = jobs.find((j: Job) => j.id === (isBreak ? lastJob?.jobId : active.jobId));
         const currentTask = TASKS.find((t) => t.id === (isBreak ? lastJob?.taskId : active.taskId));
         const timerMs = isBreak && lastJob ? diffMs(lastJob.start, lastJob.end) : diffMs(active.start);
         const isField = (isBreak ? lastJob?.workType : active.workType) === 'field';
@@ -120,7 +120,7 @@ export default function ClockPanel({ entries, active, lastJob, clockIn, clockOut
                     <div className="active-timer-top">
                         <span className="active-job-label">{currentJob?.name}</span>
                         <span className="active-task-label">{isBreak ? 'Break' : currentTask?.name}</span>
-                        {isField && !isBreak && <span className="active-task-label field-tag">🚗 Field</span>}
+                        {isField && !isBreak && <span className="active-task-label field-tag">Field</span>}
                     </div>
                     <div className="active-timer-display">
                         {isBreak ? <span className="paused-label">⏸ Paused</span> : formatHMS(timerMs)}
@@ -166,13 +166,12 @@ export default function ClockPanel({ entries, active, lastJob, clockIn, clockOut
         );
     }
 
-    const selectedJob = JOBS.find((j: Job) => j.id === jobId);
+    const selectedJob = jobs.find((j: Job) => j.id === jobId);
 
     // ─── GPS BLOCKED modal ──────────────────────────────────────────────────
     const blockedModal = gpsStatus === 'blocked' && (
         <div className="modal-overlay">
             <div className="modal-sheet">
-                <div className="blocked-icon">🚫</div>
                 <h3>Cannot clock in</h3>
                 {gpsError === 'gps_denied' ? (
                     <>
@@ -220,15 +219,14 @@ export default function ClockPanel({ entries, active, lastJob, clockIn, clockOut
                 </div>
                 <div className="work-type-toggle">
                     <button className={`work-type-btn ${workType === 'onsite' ? 'active' : ''}`} onClick={() => setWorkType('onsite')}>
-                        <span>🏗️</span> On-Site
+                        On-Site
                     </button>
                     <button className={`work-type-btn ${workType === 'field' ? 'active' : ''}`} onClick={() => setWorkType('field')}>
-                        <span>🚗</span> Field / Travel
+                        Field / Travel
                     </button>
                 </div>
                 {workType === 'field' && (
                     <div className="field-notice">
-                        <span>📍</span>
                         <span>Field mode tracks your GPS route. Location is <strong>mandatory</strong> and will be visible to your supervisor.</span>
                     </div>
                 )}
@@ -238,25 +236,25 @@ export default function ClockPanel({ entries, active, lastJob, clockIn, clockOut
             <div className="section-block">
                 <div className="section-row-header">
                     <span className="section-label">Select current project</span>
-                    <span className="section-count">01 / 0{JOBS.length}</span>
+                    <span className="section-count">01 / 0{jobs.length}</span>
                 </div>
                 <div className="job-grid">
-                    {JOBS.map((j: Job, idx: number) => (
+                    {jobs.map((j: Job, idx: number) => (
                         <div key={j.id} className={`job-tile ${jobId === j.id ? 'selected' : ''}`} onClick={() => setJobId(j.id)}>
                             <div className="job-tile-header">
-                                <span className="job-tile-label">{idx === JOBS.length - 1 ? 'INTERNAL' : `JOB 0${idx + 1}`}</span>
+                                <span className="job-tile-label">{idx === jobs.length - 1 ? 'INTERNAL' : `JOB 0${idx + 1}`}</span>
                                 {jobId === j.id && <span className="job-tile-check">✓</span>}
                             </div>
                             <p className="job-tile-name">{j.name}</p>
-                            <p className="job-tile-address">⊙ {j.address}</p>
-                            {workType === 'onsite' && <p className="job-tile-radius">📍 {j.radius}m radius</p>}
+                            <p className="job-tile-address">{j.address}</p>
+                            {workType === 'onsite' && <p className="job-tile-radius">{j.radius}m radius</p>}
                         </div>
                     ))}
                 </div>
             </div>
 
             {/* Task selection */}
-            <div className="section-block">
+            {/* <div className="section-block">
                 <div className="section-row-header">
                     <span className="section-label">Current task code</span>
                     <span className="section-count">02 / 02</span>
@@ -268,15 +266,15 @@ export default function ClockPanel({ entries, active, lastJob, clockIn, clockOut
                         </button>
                     ))}
                 </div>
-            </div>
+            </div> */}
 
             {/* Clock in button */}
             <div className="section-block">
                 <button className="btn-dark btn-clock-in" onClick={handleClockInClick}>
-                    {workType === 'field' ? '🚗' : '↗'} Clock in at {selectedJob?.name}
+                    ↗ Clock in at {selectedJob?.name}
                 </button>
                 {workType === 'onsite' && (
-                    <p className="geofence-hint">📍 Location will be verified against the job site ({selectedJob?.radius}m radius)</p>
+                    <p className="geofence-hint">Location will be verified against the job site ({selectedJob?.radius}m radius)</p>
                 )}
             </div>
 
@@ -308,7 +306,7 @@ function EntryList({ entries, getJobName, getTaskName, formatTime }: { entries: 
                         <strong>{getJobName(e.jobId)}</strong>
                         <span>
                             {getTaskName(e.taskId ?? '')} · {formatTime(e.start)} – {formatTime(e.end ?? e.start)}
-                            {e.workType === 'field' && <span className="entry-field-tag"> · 🚗 Field</span>}
+                            {e.workType === 'field' && <span className="entry-field-tag">Field</span>}
                         </span>
                     </div>
                     <div className="entry-row-right">

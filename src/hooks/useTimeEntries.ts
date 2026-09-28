@@ -1,5 +1,6 @@
 // hooks/useTimeEntries.ts
 import { useState, useEffect } from 'react';
+import { JOBS, type Job } from '../data/jobs';
 
 export type LocationFlag = 'outside_radius' | 'gps_denied' | null;
 export type SupervisorStatus = 'pending' | 'approved' | 'rejected';
@@ -52,13 +53,48 @@ function loadEntries(): TimeEntry[] {
     catch { return []; }
 }
 
+function loadJobs(): Job[] {
+    try {
+        const stored = localStorage.getItem('jobs');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+    } catch { }
+    return JOBS;
+}
+
+export type UserRole = 'none' | 'supervisor' | 'employee';
+
+function loadRole(): UserRole {
+    try {
+        const stored = localStorage.getItem('userRole');
+        if (stored === 'supervisor' || stored === 'employee') return stored;
+    } catch {}
+    return 'none';
+}
+
 export function useTimeEntries() {
     const [entries, setEntries] = useState<TimeEntry[]>(loadEntries);
-    const [supervisorUnlocked, setSupervisorUnlocked] = useState(false);
+    const [jobs, setJobs] = useState<Job[]>(loadJobs);
+    const [userRole, setUserRole] = useState<UserRole>(loadRole);
+    const [supervisorUnlocked, setSupervisorUnlocked] = useState(() => loadRole() === 'supervisor');
 
     useEffect(() => {
         localStorage.setItem('entries', JSON.stringify(entries));
     }, [entries]);
+
+    useEffect(() => {
+        localStorage.setItem('userRole', userRole);
+    }, [userRole]);
+
+    useEffect(() => {
+        if (jobs.length === 0) {
+            setJobs(JOBS);
+        } else {
+            localStorage.setItem('jobs', JSON.stringify(jobs));
+        }
+    }, [jobs]);
 
     const active = entries.find((e) => e.end === null) ?? null;
     const lastJob = entries.find((e) => e.jobId !== 'break' && e.end !== null) ?? null;
@@ -104,17 +140,56 @@ export function useTimeEntries() {
     const editEntryTime = (id: string, start: string, end: string | null) => updateEntry(id, { start, end });
 
     const checkSupervisorPin = (pin: string): boolean => {
-        if (pin === SUPERVISOR_PIN) { setSupervisorUnlocked(true); return true; }
+        if (pin === SUPERVISOR_PIN) {
+            setSupervisorUnlocked(true);
+            setUserRole('supervisor');
+            return true;
+        }
         return false;
     };
-    const lockSupervisor = () => setSupervisorUnlocked(false);
+
+    const loginAsEmployee = () => {
+        setUserRole('employee');
+        setSupervisorUnlocked(false);
+    };
+
+    const logoutRole = () => {
+        setUserRole('none');
+        setSupervisorUnlocked(false);
+    };
+
+    const lockSupervisor = () => {
+        logoutRole();
+    };
+
+    const updateJob = (id: string, changes: Partial<Job>) => {
+        setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...changes } : j)));
+    };
+
+    const deleteJob = (id: string) => {
+        setJobs((prev) => prev.filter((j) => j.id !== id));
+    };
+
+    const addJob = (newJob: Omit<Job, 'id'>) => {
+        const created: Job = {
+            id: `j_${Date.now()}`,
+            ...newJob,
+        };
+        setJobs((prev) => [...prev, created]);
+    };
+
+    const resetDummyJobs = () => {
+        setJobs(JOBS);
+        localStorage.setItem('jobs', JSON.stringify(JOBS));
+    };
 
     const flaggedEntries = entries.filter((e) => e.supervisorStatus === 'pending');
 
     return {
-        entries, active, lastJob,
+        entries, active, lastJob, jobs, updateJob, deleteJob, addJob, resetDummyJobs,
         clockIn, clockOut, updateEntry, deleteEntry,
         approveEntry, rejectEntry, editEntryTime,
+        userRole, setUserRole, loginAsEmployee, logoutRole,
         supervisorUnlocked, checkSupervisorPin, lockSupervisor,
         flaggedEntries,
     };

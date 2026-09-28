@@ -1,11 +1,11 @@
 // components/TimesheetTable.tsx — auto-calculated, no manual input
 import { useNavigate } from 'react-router-dom';
-import { JOBS, TASKS } from '../data/jobs';
+import { TASKS } from '../data/jobs';
 import type { Job } from '../data/jobs';
 import { diffMs, hoursDecimal } from '../utils/time';
 import type { TimeEntry } from '../hooks/useTimeEntries';
 
-export default function TimesheetTable({ entries }: { entries: TimeEntry[] }) {
+export default function TimesheetTable({ entries, jobs = [] }: { entries: TimeEntry[]; jobs: Job[] }) {
     const navigate = useNavigate();
 
     // Automatic calculation — only from actual start/end, never manual
@@ -14,8 +14,8 @@ export default function TimesheetTable({ entries }: { entries: TimeEntry[] }) {
     const approvedTotal = done.filter((e: any) => e.supervisorStatus === 'approved').reduce((sum: number, e: any) => sum + diffMs(e.start, e.end), 0);
     const pendingCount = done.filter((e: any) => e.supervisorStatus === 'pending').length;
 
-    const getJobName = (jId: string) => JOBS.find((j: Job) => j.id === jId)?.name || 'Unknown Job';
-    const getJobColor = (jId: string) => JOBS.find((j: Job) => j.id === jId)?.color || '#888';
+    const getJobName = (jId: string) => jobs.find((j: Job) => j.id === jId)?.name || 'Unknown Job';
+    const getJobColor = (jId: string) => jobs.find((j: Job) => j.id === jId)?.color || '#888';
     const getTaskName = (tId: string) => TASKS.find((t) => t.id === tId)?.name || 'Task';
     const formatTime = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 
@@ -48,12 +48,12 @@ export default function TimesheetTable({ entries }: { entries: TimeEntry[] }) {
                     </div>
                     {pendingCount > 0 && (
                         <div className="ts-summary-sub">
-                            <span className="ts-sub-label">⚠ Pending review</span>
+                            <span className="ts-sub-label">Pending review</span>
                             <span className="ts-sub-value pending">{pendingCount} entr{pendingCount > 1 ? 'ies' : 'y'}</span>
                         </div>
                     )}
                 </div>
-                <p className="ts-auto-note">⚡ Hours are calculated automatically from your clock in/out timestamps</p>
+                <p className="ts-auto-note">Hours are calculated automatically from your clock in/out timestamps</p>
             </div>
 
             <div className="ts-divider" />
@@ -67,7 +67,6 @@ export default function TimesheetTable({ entries }: { entries: TimeEntry[] }) {
 
                 {done.length === 0 && (
                     <div className="ts-empty-state">
-                        <p>🕐</p>
                         <p>No entries yet. Clock in to start tracking your time!</p>
                     </div>
                 )}
@@ -80,14 +79,14 @@ export default function TimesheetTable({ entries }: { entries: TimeEntry[] }) {
                                 <div className="entry-job-name-row">
                                     <span className="job-dot-sm" style={{ backgroundColor: getJobColor(e.jobId) }} />
                                     <strong>{getJobName(e.jobId)}</strong>
-                                    {e.workType === 'field' && <span className="entry-field-tag">🚗 Field</span>}
+                                    {e.workType === 'field' && <span className="entry-field-tag">Field</span>}
                                 </div>
                                 <span>
                                     {getTaskName(e.taskId ?? '')} · {formatTime(e.start)} – {formatTime(e.end ?? e.start)}
                                 </span>
                                 {e.locationFlag && (
                                     <span className="entry-flag-text">
-                                        {e.locationFlag === 'gps_denied' ? '⚠ GPS was off' : '⚠ Outside geofence'}
+                                        {e.locationFlag === 'gps_denied' ? 'GPS was off' : 'Outside geofence'}
                                     </span>
                                 )}
                                 {e.notes && <span className="entry-note-text">"{e.notes}"</span>}
@@ -95,9 +94,9 @@ export default function TimesheetTable({ entries }: { entries: TimeEntry[] }) {
                             <div className="entry-row-right">
                                 {/* Auto-calculated — no manual input */}
                                 <span className="entry-hours-label">{hoursDecimal(diffMs(e.start, e.end ?? undefined))} h</span>
-                                {e.supervisorStatus === 'approved' && <span className="synced-label">✓ Approved</span>}
-                                {e.supervisorStatus === 'pending' && <span className="pending-label">⏳ Pending</span>}
-                                {e.supervisorStatus === 'rejected' && <span className="rejected-label">✕ Rejected</span>}
+                                {e.supervisorStatus === 'approved' && <span className="synced-label">Approved</span>}
+                                {e.supervisorStatus === 'pending' && <span className="pending-label">Pending</span>}
+                                {e.supervisorStatus === 'rejected' && <span className="rejected-label">Rejected</span>}
                             </div>
                         </div>
                     ))}
@@ -106,7 +105,7 @@ export default function TimesheetTable({ entries }: { entries: TimeEntry[] }) {
 
             {pendingCount > 0 && (
                 <div className="ts-supervisor-cta">
-                    <p>⚠ {pendingCount} entr{pendingCount > 1 ? 'ies need' : 'y needs'} supervisor review</p>
+                    <p>{pendingCount} entr{pendingCount > 1 ? 'ies need' : 'y needs'} supervisor review</p>
                     <button className="view-all-btn" onClick={() => navigate('/supervisor')}>
                         Go to Supervisor Panel ↗
                     </button>
