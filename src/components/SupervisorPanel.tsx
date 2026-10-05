@@ -1,360 +1,379 @@
-// components/SupervisorPanel.tsx
+// src/components/SupervisorPanel.tsx
 import { useState } from 'react';
-import { TASKS } from '../data/jobs';
-import type { Job } from '../data/jobs';
+import type { TimeEntry, Job, UserProfile } from '../types';
 import { diffMs, hoursDecimal } from '../utils/time';
-import type { TimeEntry } from '../hooks/useTimeEntries';
+import JustificationModal from './JustificationModal';
+
+interface SupervisorPanelProps {
+    currentUser: UserProfile;
+    users: UserProfile[];
+    entries: TimeEntry[];
+    jobs: Job[];
+    approveEntry: (id: string, approvedByUserId: string) => void;
+    rejectEntry: (id: string) => void;
+    editEntryWithJustification: (
+        entryId: string,
+        newStart: string,
+        newEnd: string | null,
+        justification: string,
+        editedByUserId: string,
+        editedByUserName: string
+    ) => void;
+    deleteEntry: (id: string) => void;
+    canEditAndApprove: boolean;
+}
 
 export default function SupervisorPanel({
-    entries, jobs = [], updateJob, deleteJob, addJob, resetDummyJobs,
-    approveEntry, rejectEntry, editEntryTime,
-    supervisorUnlocked, checkSupervisorPin, lockSupervisor
-}: any) {
+    currentUser,
+    users,
+    entries,
+    jobs,
+    approveEntry,
+    rejectEntry,
+    editEntryWithJustification,
+    deleteEntry,
+    canEditAndApprove,
+}: SupervisorPanelProps) {
+    const [activeTab, setActiveTab] = useState<'exceptions' | 'all' | 'employees'>('exceptions');
+    const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('all');
 
-    const [pin, setPin] = useState('');
-    const [pinError, setPinError] = useState(false);
-    const [editingId, setEditingId] = useState<string | null>(null);
-    const [editStart, setEditStart] = useState('');
-    const [editEnd, setEditEnd] = useState('');
-    const [activeTab, setActiveTab] = useState<'flagged' | 'all' | 'jobs'>('jobs'); // default or flagged
+    // Justification Modal state
+    const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
 
-    // Job Editing State
-    const [editingJobId, setEditingJobId] = useState<string | null>(null);
-    const [editJobAddress, setEditJobAddress] = useState('');
-    const [editJobLat, setEditJobLat] = useState(0);
-    const [editJobLng, setEditJobLng] = useState(0);
-    const [editJobRadius, setEditJobRadius] = useState(0);
+    // Audit History Viewer modal
+    const [viewingHistoryEntry, setViewingHistoryEntry] = useState<TimeEntry | null>(null);
 
-    // New Job State
-    const [showAddJobModal, setShowAddJobModal] = useState(false);
-    const [newJobName, setNewJobName] = useState('');
-    const [newJobAddress, setNewJobAddress] = useState('');
-    const [newJobColor, setNewJobColor] = useState('#3B82F6');
-    const [newJobLat, setNewJobLat] = useState(37.7749);
-    const [newJobLng, setNewJobLng] = useState(-122.4194);
-    const [newJobRadius, setNewJobRadius] = useState(300);
+    const getJobName = (jId: string) => jobs.find((j) => j.id === jId)?.name || 'Unknown Job';
+    const getJobColor = (jId: string) => jobs.find((j) => j.id === jId)?.color || '#888';
+    const formatTime = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const formatDate = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-    const handlePinSubmit = () => {
-        const ok = checkSupervisorPin(pin);
-        if (!ok) { setPinError(true); setPin(''); }
-    };
+    // Filter finished time entries
+    const completedEntries = entries.filter((e) => e.end && e.jobId !== 'break');
 
-    const getJobName = (jId: string) => jobs.find((j: Job) => j.id === jId)?.name || 'Unknown';
-    const getJobColor = (jId: string) => jobs.find((j: Job) => j.id === jId)?.color || '#888';
-    const getTaskName = (tId: string) => TASKS.find((t) => t.id === tId)?.name || '—';
-    const formatTime = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-    const formatDate = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    // Exceptions list (outside radius, gps denied, manual edits, pending review)
+    const flaggedEntries = completedEntries.filter(
+        (e) => e.supervisorStatus === 'pending' || e.locationFlag !== null
+    );
 
-    const startEdit = (e: any) => {
-        setEditingId(e.id);
-        setEditStart(new Date(e.start).toISOString().slice(0, 16));
-        setEditEnd(e.end ? new Date(e.end).toISOString().slice(0, 16) : '');
-    };
+    // Apply Employee filter if selected
+    const filteredEntries = completedEntries.filter((e) => {
+        if (selectedEmployeeId !== 'all' && e.userId !== selectedEmployeeId) return false;
+        return true;
+    });
 
-    const saveEdit = () => {
-        if (editingId) {
-            editEntryTime(editingId, new Date(editStart).toISOString(), editEnd ? new Date(editEnd).toISOString() : null);
-            setEditingId(null);
+    const displayEntries = activeTab === 'exceptions'
+        ? flaggedEntries.filter(e => selectedEmployeeId === 'all' || e.userId === selectedEmployeeId)
+        : filteredEntries;
+
+    // Totals calculations
+    const totalHours = filteredEntries.reduce((s, e) => s + diffMs(e.start, e.end!), 0);
+    const approvedHours = filteredEntries.filter((e) => e.supervisorStatus === 'approved').reduce((s, e) => s + diffMs(e.start, e.end!), 0);
+    const pendingCount = flaggedEntries.length;
+
+    // Save Edit with Justification handler
+    const handleSaveEdit = (newStart: string, newEnd: string | null, justification: string) => {
+        if (editingEntry) {
+            editEntryWithJustification(
+                editingEntry.id,
+                newStart,
+                newEnd,
+                justification,
+                currentUser.id,
+                currentUser.name
+            );
+            setEditingEntry(null);
         }
     };
 
-    const startJobEdit = (j: Job) => {
-        setEditingJobId(j.id);
-        setEditJobAddress(j.address);
-        setEditJobLat(j.lat);
-        setEditJobLng(j.lng);
-        setEditJobRadius(j.radius);
-    };
-
-    const saveJobEdit = () => {
-        if (editingJobId) {
-            updateJob(editingJobId, {
-                address: editJobAddress,
-                lat: Number(editJobLat),
-                lng: Number(editJobLng),
-                radius: Number(editJobRadius),
-            });
-            setEditingJobId(null);
-        }
-    };
-
-    const handleAddJobSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newJobName.trim()) return;
-        addJob({
-            name: newJobName,
-            address: newJobAddress || 'Custom Location',
-            color: newJobColor,
-            lat: Number(newJobLat),
-            lng: Number(newJobLng),
-            radius: Number(newJobRadius),
-        });
-        setNewJobName('');
-        setNewJobAddress('');
-        setShowAddJobModal(false);
-    };
-
-    const displayEntries: TimeEntry[] = entries.filter((e: TimeEntry) => e.end && e.jobId !== 'break');
-    const flagged = displayEntries.filter((e: TimeEntry) => e.supervisorStatus === 'pending');
-    const allEntries = displayEntries;
-    const shown = activeTab === 'flagged' ? flagged : allEntries;
-
-    const totalHours = allEntries.reduce((s: number, e: TimeEntry) => s + diffMs(e.start, e.end!), 0);
-    const approvedHours = allEntries.filter((e: TimeEntry) => e.supervisorStatus === 'approved').reduce((s: number, e: TimeEntry) => s + diffMs(e.start, e.end!), 0);
-
-    // ─── PIN Gate ───────────────────────────────────────────────────────────
-    if (!supervisorUnlocked) {
-        return (
-            <div className="clock-page">
-                <div className="page-header">
-                    <p className="page-header-date">Supervisor Access Required</p>
-                </div>
-                <div className="supervisor-pin-card">
-                    <h3>Supervisor Authorization</h3>
-                    <p className="pin-desc">Enter PIN <code>1234</code> to access supervisor controls and job settings.</p>
-                    <div className="pin-row">
-                        <input
-                            type="password"
-                            className={`pin-input ${pinError ? 'error' : ''}`}
-                            placeholder="Enter PIN (1234)"
-                            value={pin}
-                            maxLength={6}
-                            onChange={(e) => { setPin(e.target.value); setPinError(false); }}
-                            onKeyDown={(e) => e.key === 'Enter' && handlePinSubmit()}
-                        />
-                        <button className="btn-dark" onClick={handlePinSubmit}>Unlock Dashboard</button>
-                    </div>
-                    {pinError && <p className="pin-error">Incorrect PIN. Please try again with 1234.</p>}
-                </div>
-            </div>
-        );
-    }
-
-    // ─── Supervisor Dashboard ─────────────────────────────────────────────
     return (
-        <div className="clock-page">
+        <div className="supervisor-page">
             <div className="page-header">
                 <div>
-                    <p className="page-header-date">Supervisor Dashboard</p>
+                    <span className="section-eyebrow">T29 MANAGEMENT & AUDIT CONTROL</span>
+                    <h2>Supervisor Exception & Payroll Dashboard</h2>
                 </div>
-                <button className="btn-ghost-sm" onClick={lockSupervisor}>Lock / Exit Mode</button>
+                <div className="role-permission-pill">
+                    🔑 Current Permission Level: <strong>{currentUser.role.replace('_', ' ').toUpperCase()}</strong>
+                </div>
             </div>
 
-            {/* Stats row */}
+            {/* Permission Check Notice */}
+            {!canEditAndApprove && (
+                <div className="permission-warning-banner">
+                    <strong>Read-Only Mode:</strong> Your role ({currentUser.role}) does not have edit/approval rights. Switch to Super Admin or Supervisor persona in top header to approve or edit timesheets.
+                </div>
+            )}
+
+            {/* Supervisor Key Metrics */}
             <div className="supervisor-stats">
                 <div className="stat-card">
-                    <p className="stat-label">Total Jobs</p>
-                    <p className="stat-value">{jobs.length}</p>
+                    <p className="stat-label">Pending Exceptions</p>
+                    <p className="stat-value flagged">{pendingCount}</p>
+                    <span className="stat-sub">Requires supervisor review</span>
                 </div>
                 <div className="stat-card">
-                    <p className="stat-label">Pending Review</p>
-                    <p className="stat-value flagged">{flagged.length}</p>
+                    <p className="stat-label">Approved Payroll Hours</p>
+                    <p className="stat-value approved">{hoursDecimal(approvedHours)} h</p>
+                    <span className="stat-sub">Ready for T29 export</span>
                 </div>
                 <div className="stat-card">
-                    <p className="stat-label">Approved Hours</p>
-                    <p className="stat-value">{hoursDecimal(approvedHours)} h</p>
-                </div>
-                <div className="stat-card">
-                    <p className="stat-label">Total Hours</p>
+                    <p className="stat-label">Total Recorded Hours</p>
                     <p className="stat-value">{hoursDecimal(totalHours)} h</p>
+                    <span className="stat-sub">Across all employees</span>
+                </div>
+                <div className="stat-card">
+                    <p className="stat-label">Active Field Crew</p>
+                    <p className="stat-value">{users.filter((u) => u.role === 'employee').length}</p>
+                    <span className="stat-sub">Field & Onsite technicians</span>
                 </div>
             </div>
 
-            {/* Tabs */}
-            <div className="sup-tabs">
-                <button className={`sup-tab ${activeTab === 'jobs' ? 'active' : ''}`} onClick={() => setActiveTab('jobs')}>
-                    Jobs & Geofences ({jobs.length})
-                </button>
-                <button className={`sup-tab ${activeTab === 'flagged' ? 'active' : ''}`} onClick={() => setActiveTab('flagged')}>
-                    Pending ({flagged.length})
-                </button>
-                <button className={`sup-tab ${activeTab === 'all' ? 'active' : ''}`} onClick={() => setActiveTab('all')}>
-                    All Time Entries ({allEntries.length})
-                </button>
+            {/* Filter Bar */}
+            <div className="sup-filter-bar">
+                <div className="sup-tabs">
+                    <button
+                        className={`sup-tab ${activeTab === 'exceptions' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('exceptions')}
+                    >
+                        Exception Flags & Pending ({flaggedEntries.length})
+                    </button>
+                    <button
+                        className={`sup-tab ${activeTab === 'all' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('all')}
+                    >
+                        All Time Entries ({completedEntries.length})
+                    </button>
+                    <button
+                        className={`sup-tab ${activeTab === 'employees' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('employees')}
+                    >
+                        Employee Hours Breakdown
+                    </button>
+                </div>
+
+                <div className="employee-filter-select">
+                    <span className="filter-label">Filter Employee:</span>
+                    <select
+                        className="worker-select-dropdown"
+                        value={selectedEmployeeId}
+                        onChange={(e) => setSelectedEmployeeId(e.target.value)}
+                    >
+                        <option value="all">All Workers</option>
+                        {users.filter(u => u.role !== 'contractor').map((u) => (
+                            <option key={u.id} value={u.id}>
+                                {u.name} ({u.title})
+                            </option>
+                        ))}
+                    </select>
+                </div>
             </div>
 
-            {/* Entries & Jobs */}
-            <div className="sup-entries">
-                {activeTab === 'jobs' && (
-                    <div className="jobs-header-actions">
-                        <p className="jobs-section-desc">
-                            Supervisor Controls: View 4 dummy jobs, edit location coordinates & geofence radius, or delete jobs.
-                        </p>
-                        <div className="jobs-btn-group">
-                            <button className="btn-dark-sm" onClick={() => setShowAddJobModal(true)}>
-                                + Add New Job
-                            </button>
-                            <button className="btn-ghost-sm" onClick={resetDummyJobs}>
-                                ↺ Reset 4 Dummy Jobs
-                            </button>
-                        </div>
-                    </div>
-                )}
+            {/* Employee Breakdown View */}
+            {activeTab === 'employees' && (
+                <div className="employee-breakdown-grid">
+                    {users
+                        .filter((u) => u.role !== 'contractor')
+                        .map((emp) => {
+                            const empEntries = completedEntries.filter((e) => e.userId === emp.id);
+                            const empHours = empEntries.reduce((s, e) => s + diffMs(e.start, e.end!), 0);
+                            const empApproved = empEntries.filter((e) => e.supervisorStatus === 'approved').reduce((s, e) => s + diffMs(e.start, e.end!), 0);
+                            const empFlags = empEntries.filter((e) => e.locationFlag !== null || e.supervisorStatus === 'pending').length;
 
-                {/* Add Job Modal */}
-                {showAddJobModal && (
-                    <div className="job-add-card">
-                        <h4>Create New Job Location</h4>
-                        <form onSubmit={handleAddJobSubmit} className="edit-form">
-                            <div className="edit-row">
-                                <label>Job Name</label>
-                                <input type="text" className="edit-input" required placeholder="e.g. Metro Plaza Remodel" value={newJobName} onChange={e => setNewJobName(e.target.value)} />
-                            </div>
-                            <div className="edit-row">
-                                <label>Badge Color</label>
-                                <input type="color" className="edit-input" style={{ height: '38px', padding: '2px 6px', cursor: 'pointer' }} value={newJobColor} onChange={e => setNewJobColor(e.target.value)} />
-                            </div>
-                            <div className="edit-row">
-                                <label>Address</label>
-                                <input type="text" className="edit-input" placeholder="e.g. 500 Market St" value={newJobAddress} onChange={e => setNewJobAddress(e.target.value)} />
-                            </div>
-                            <div className="edit-row">
-                                <label>Geofence Radius (m)</label>
-                                <input type="number" className="edit-input" value={newJobRadius} onChange={e => setNewJobRadius(Number(e.target.value))} />
-                            </div>
-                            <div className="edit-row">
-                                <label>Latitude</label>
-                                <input type="number" step="0.000001" className="edit-input" value={newJobLat} onChange={e => setNewJobLat(Number(e.target.value))} />
-                            </div>
-                            <div className="edit-row">
-                                <label>Longitude</label>
-                                <input type="number" step="0.000001" className="edit-input" value={newJobLng} onChange={e => setNewJobLng(Number(e.target.value))} />
-                            </div>
-                            <div className="edit-actions">
-                                <button type="submit" className="btn-dark-sm">Save Job</button>
-                                <button type="button" className="btn-ghost-sm" onClick={() => setShowAddJobModal(false)}>Cancel</button>
-                            </div>
-                        </form>
-                    </div>
-                )}
-
-                {activeTab !== 'jobs' && shown.length === 0 && (
-                    <div className="sup-empty">
-                        <span>{activeTab === 'flagged' ? 'No entries need review!' : 'No entries yet.'}</span>
-                    </div>
-                )}
-
-                {/* Time Entries view */}
-                {activeTab !== 'jobs' && shown.map((e: any) => (
-                    <div key={e.id} className={`sup-entry-card ${e.locationFlag ? 'flagged-card' : ''} ${e.supervisorStatus === 'rejected' ? 'rejected-card' : ''}`}>
-                        {e.locationFlag && (
-                            <div className="flag-banner">
-                                {e.locationFlag === 'gps_denied'
-                                    ? 'GPS was off when clocked in — location unverified'
-                                    : 'Clocked in outside the job site geofence'
-                                }
-                            </div>
-                        )}
-
-                        <div className="sup-entry-main">
-                            <div className="sup-entry-left">
-                                <span className="job-dot" style={{ backgroundColor: getJobColor(e.jobId) }} />
-                                <div>
-                                    <strong>{getJobName(e.jobId)}</strong>
-                                    <p className="sup-entry-meta">
-                                        {formatDate(e.start)} · {getTaskName(e.taskId)} · {formatTime(e.start)} – {e.end ? formatTime(e.end) : 'In progress'}
-                                        {e.workType === 'field' && <span className="field-tag-small">Field</span>}
-                                    </p>
-                                    {e.notes && <p className="sup-entry-note">"{e.notes}"</p>}
-                                </div>
-                            </div>
-                            <div className="sup-entry-right">
-                                <span className="sup-hours">{e.end ? hoursDecimal(diffMs(e.start, e.end)) : '—'} h</span>
-                                <span className={`sup-status-badge ${e.supervisorStatus}`}>{e.supervisorStatus}</span>
-                            </div>
-                        </div>
-
-                        {editingId === e.id ? (
-                            <div className="edit-form">
-                                <div className="edit-row">
-                                    <label>Clock in</label>
-                                    <input type="datetime-local" className="edit-input" value={editStart} onChange={ev => setEditStart(ev.target.value)} />
-                                </div>
-                                <div className="edit-row">
-                                    <label>Clock out</label>
-                                    <input type="datetime-local" className="edit-input" value={editEnd} onChange={ev => setEditEnd(ev.target.value)} />
-                                </div>
-                                <div className="edit-actions">
-                                    <button className="btn-dark-sm" onClick={saveEdit}>Save changes</button>
-                                    <button className="btn-ghost-sm" onClick={() => setEditingId(null)}>Cancel</button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="sup-entry-actions">
-                                {e.supervisorStatus === 'pending' && <>
-                                    <button className="sup-btn approve" onClick={() => approveEntry(e.id)}>Approve</button>
-                                    <button className="sup-btn reject" onClick={() => rejectEntry(e.id)}>Reject</button>
-                                </>}
-                                {e.supervisorStatus !== 'pending' && (
-                                    <button className="sup-btn neutral" onClick={() => approveEntry(e.id)}>Re-approve</button>
-                                )}
-                                <button className="sup-btn edit" onClick={() => startEdit(e)}>Edit time</button>
-                            </div>
-                        )}
-                    </div>
-                ))}
-                
-                {/* Jobs Management View (Supervisor only) */}
-                {activeTab === 'jobs' && jobs.length === 0 && (
-                    <div className="sup-empty">
-                        <span>No jobs found. Click "Reset 4 Dummy Jobs" above to restore standard jobs.</span>
-                    </div>
-                )}
-
-                {activeTab === 'jobs' && jobs.map((j: Job) => (
-                    <div key={j.id} className="sup-entry-card job-card-item">
-                        <div className="sup-entry-main">
-                            <div className="sup-entry-left">
-                                <span className="job-dot" style={{ backgroundColor: j.color }} />
-                                <div>
-                                    <div className="job-title-badge">
-                                        <strong>{j.name}</strong>
-                                        <span className="job-id-tag">ID: {j.id}</span>
+                            return (
+                                <div key={emp.id} className="employee-stat-card">
+                                    <div className="emp-card-header">
+                                        <span className="user-avatar">{emp.avatar}</span>
+                                        <div>
+                                            <h4>{emp.name}</h4>
+                                            <span className="emp-title-tag">{emp.title} · ${emp.hourlyRate}/hr</span>
+                                        </div>
                                     </div>
-                                    <p className="sup-entry-meta">📍 Address: {j.address}</p>
-                                    <p className="sup-entry-note">
-                                        🎯 Geofence Radius: <strong>{j.radius}m</strong> | Lat: <code>{j.lat}</code> | Lng: <code>{j.lng}</code>
-                                    </p>
+
+                                    <div className="emp-card-metrics">
+                                        <div className="m-item">
+                                            <span className="m-label">Total Hours</span>
+                                            <span className="m-val">{hoursDecimal(empHours)} h</span>
+                                        </div>
+                                        <div className="m-item">
+                                            <span className="m-label">Approved</span>
+                                            <span className="m-val approved">{hoursDecimal(empApproved)} h</span>
+                                        </div>
+                                        <div className="m-item">
+                                            <span className="m-label">Exceptions</span>
+                                            <span className={`m-val ${empFlags > 0 ? 'flagged' : ''}`}>{empFlags}</span>
+                                        </div>
+                                    </div>
                                 </div>
+                            );
+                        })}
+                </div>
+            )}
+
+            {/* Time Entries Cards */}
+            {activeTab !== 'employees' && (
+                <div className="sup-entries-stack">
+                    {displayEntries.length === 0 ? (
+                        <div className="sup-empty">
+                            <span>
+                                {activeTab === 'exceptions'
+                                    ? ' No exception flags! All timesheets are clean & approved.'
+                                    : 'No time entries recorded for this filter.'}
+                            </span>
+                        </div>
+                    ) : (
+                        displayEntries.map((e) => (
+                            <div
+                                key={e.id}
+                                className={`sup-entry-card ${e.locationFlag ? 'flagged-card' : ''} ${e.supervisorStatus === 'rejected' ? 'rejected-card' : ''}`}
+                            >
+                                {/* Exception Banner */}
+                                {e.locationFlag && (
+                                    <div className="flag-banner">
+                                        Exception Flag:{' '}
+                                        {e.locationFlag === 'outside_radius' && 'Clocked in outside site geofence radius'}
+                                        {e.locationFlag === 'gps_denied' && 'GPS unverified (location disabled)'}
+                                        {e.locationFlag === 'manual_edit' && 'Manually edited by supervisor (Audit Justified)'}
+                                    </div>
+                                )}
+
+                                <div className="sup-entry-main">
+                                    <div className="sup-entry-left">
+                                        <span className="job-dot" style={{ backgroundColor: getJobColor(e.jobId) }} />
+                                        <div>
+                                            <div className="user-name-title-row">
+                                                <strong>{e.userName}</strong>
+                                                <span className="job-name-tag">{getJobName(e.jobId)}</span>
+                                                {e.workType === 'field' && <span className="field-tag-small">Field Mode</span>}
+                                            </div>
+                                            <p className="sup-entry-meta">
+                                                {formatDate(e.start)} · Cost Code: <code>{e.segment}</code> · {formatTime(e.start)} – {e.end ? formatTime(e.end) : 'In progress'}
+                                            </p>
+                                            {e.notes && <p className="sup-entry-note">Notes: "{e.notes}"</p>}
+                                        </div>
+                                    </div>
+
+                                    <div className="sup-entry-right">
+                                        <span className="sup-hours">{hoursDecimal(diffMs(e.start, e.end!))} h</span>
+                                        <span className={`sup-status-badge ${e.supervisorStatus}`}>{e.supervisorStatus.toUpperCase()}</span>
+                                    </div>
+                                </div>
+
+                                {/* Audit Edit History Row */}
+                                {e.editHistory.length > 0 && (
+                                    <div className="audit-trail-inline">
+                                        <span> Edit History: {e.editHistory.length} revision(s)</span>
+                                        <button
+                                            className="btn-link-sm"
+                                            onClick={() => setViewingHistoryEntry(e)}
+                                        >
+                                            View Audit Justification Log
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Action Buttons (Gated by T29 Permissions) */}
+                                {canEditAndApprove && (
+                                    <div className="sup-entry-actions">
+                                        {e.supervisorStatus === 'pending' && (
+                                            <>
+                                                <button
+                                                    className="sup-btn approve"
+                                                    onClick={() => approveEntry(e.id, currentUser.id)}
+                                                >
+                                                    ✓ Approve Entry
+                                                </button>
+                                                <button
+                                                    className="sup-btn reject"
+                                                    onClick={() => rejectEntry(e.id)}
+                                                >
+                                                    ✕ Reject Entry
+                                                </button>
+                                            </>
+                                        )}
+
+                                        {e.supervisorStatus !== 'pending' && (
+                                            <button
+                                                className="sup-btn neutral"
+                                                onClick={() => approveEntry(e.id, currentUser.id)}
+                                            >
+                                                ✓ Re-Approve
+                                            </button>
+                                        )}
+
+                                        <button
+                                            className="sup-btn edit"
+                                            onClick={() => setEditingEntry(e)}
+                                        >
+                                            Edit Time (Requires Justification)
+                                        </button>
+
+                                        <button
+                                            className="sup-btn delete"
+                                            onClick={() => deleteEntry(e.id)}
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
+                                )}
                             </div>
+                        ))
+                    )}
+                </div>
+            )}
+
+            {/* Mandatory Justification Modal */}
+            {editingEntry && (
+                <JustificationModal
+                    entryInfo={{
+                        id: editingEntry.id,
+                        userName: editingEntry.userName,
+                        jobName: getJobName(editingEntry.jobId),
+                        currentStart: editingEntry.start,
+                        currentEnd: editingEntry.end,
+                    }}
+                    onSave={handleSaveEdit}
+                    onCancel={() => setEditingEntry(null)}
+                />
+            )}
+
+            {/* Edit History Audit Drawer Modal */}
+            {viewingHistoryEntry && (
+                <div className="modal-overlay">
+                    <div className="modal-sheet">
+                        <h3> Permanent Audit History Log</h3>
+                        <p className="modal-sub">
+                            Audit trail for <strong>{viewingHistoryEntry.userName}</strong> on <strong>{getJobName(viewingHistoryEntry.jobId)}</strong>
+                        </p>
+
+                        <div className="audit-history-list">
+                            {viewingHistoryEntry.editHistory.map((log) => (
+                                <div key={log.id} className="audit-history-item">
+                                    <div className="audit-item-top">
+                                        <span className="edited-by-tag">Edited by: {log.editedByUserName}</span>
+                                        <span className="audit-timestamp">{formatDate(log.editedAt)} at {formatTime(log.editedAt)}</span>
+                                    </div>
+                                    <div className="audit-time-diff">
+                                        <span className="prev-time">Old: {formatTime(log.previousStart)} – {log.previousEnd ? formatTime(log.previousEnd) : 'Now'}</span>
+                                        <span className="diff-arrow">→</span>
+                                        <span className="new-time">New: {formatTime(log.newStart)} – {log.newEnd ? formatTime(log.newEnd) : 'Now'}</span>
+                                    </div>
+                                    <div className="justification-box">
+                                        <strong>Written Justification Reason:</strong>
+                                        <p>"{log.justification}"</p>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
 
-                        {editingJobId === j.id ? (
-                            <div className="edit-form">
-                                <div className="edit-row">
-                                    <label>Address</label>
-                                    <input type="text" className="edit-input" value={editJobAddress} onChange={ev => setEditJobAddress(ev.target.value)} />
-                                </div>
-                                <div className="edit-row">
-                                    <label>Geofence Radius (meters)</label>
-                                    <input type="number" className="edit-input" value={editJobRadius} onChange={ev => setEditJobRadius(Number(ev.target.value))} />
-                                </div>
-                                <div className="edit-row">
-                                    <label>Latitude</label>
-                                    <input type="number" step="0.000001" className="edit-input" value={editJobLat} onChange={ev => setEditJobLat(Number(ev.target.value))} />
-                                </div>
-                                <div className="edit-row">
-                                    <label>Longitude</label>
-                                    <input type="number" step="0.000001" className="edit-input" value={editJobLng} onChange={ev => setEditJobLng(Number(ev.target.value))} />
-                                </div>
-                                <div className="edit-actions">
-                                    <button className="btn-dark-sm" onClick={saveJobEdit}>Save Location & Radius</button>
-                                    <button className="btn-ghost-sm" onClick={() => setEditingJobId(null)}>Cancel</button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="sup-entry-actions">
-                                <button className="sup-btn edit" onClick={() => startJobEdit(j)}>
-                                    ✏️ Edit Location & Radius
-                                </button>
-                                <button className="sup-btn delete" onClick={() => deleteJob(j.id)}>
-                                    🗑️ Delete Job
-                                </button>
-                            </div>
-                        )}
+                        <div className="modal-btns">
+                            <button className="btn-dark" onClick={() => setViewingHistoryEntry(null)}>
+                                Close Audit Log
+                            </button>
+                        </div>
                     </div>
-                ))}
-            </div>
+                </div>
+            )}
         </div>
     );
 }

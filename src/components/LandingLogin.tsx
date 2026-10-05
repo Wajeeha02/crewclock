@@ -1,93 +1,109 @@
-// components/LandingLogin.tsx
+// src/components/LandingLogin.tsx
 import { useState } from 'react';
+import type { UserProfile } from '../types';
 
 interface LandingLoginProps {
-    onSupervisorLogin: (pin: string) => boolean;
-    onEmployeeLogin: () => void;
+    users: UserProfile[];
+    onSelectUser: (userId: string) => void;
 }
 
-export default function LandingLogin({ onSupervisorLogin, onEmployeeLogin }: LandingLoginProps) {
+export default function LandingLogin({ users, onSelectUser }: LandingLoginProps) {
     const [pin, setPin] = useState('');
-    const [error, setError] = useState(false);
+    const [pinError, setPinError] = useState(false);
+    const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
 
-    const handleSupervisorSubmit = (e?: React.FormEvent) => {
-        if (e) e.preventDefault();
-        const success = onSupervisorLogin(pin);
-        if (!success) {
-            setError(true);
+    const handleUserClick = (u: UserProfile) => {
+        if (u.role === 'super_admin' || u.role === 'supervisor' || u.role === 'office_manager') {
+            setSelectedUser(u);
             setPin('');
+            setPinError(false);
+        } else {
+            // Employee or Contractor login directly
+            onSelectUser(u.id);
+        }
+    };
+
+    const handlePinSubmit = () => {
+        // Simple demo pin '1234' for supervisor/admin access
+        if (pin === '1234' || pin === '0000') {
+            if (selectedUser) {
+                onSelectUser(selectedUser.id);
+            }
+        } else {
+            setPinError(true);
         }
     };
 
     return (
-        <div className="login-landing-container">
-            <div className="login-landing-card">
-                <div className="landing-brand">
-                    <div className="landing-logo-badge">CREWCLOCK.</div>
-                    <h2>Welcome to CrewClock</h2>
-                    <p className="landing-subtitle">Select your portal access level to continue</p>
+        <div className="landing-page">
+            <div className="landing-card">
+                <div className="brand-header">
+                    <span className="brand-badge">SES CREWCLOCK SYSTEM</span>
+                    <h1>T29 Time Clock & Dispatch</h1>
+                    <p className="brand-sub">
+                        Select a user persona to enter the prototype application. Test T29 role permissions, geofencing, PTO accruals, and contractor portals.
+                    </p>
                 </div>
 
-                <div className="landing-options-grid">
-                    {/* Supervisor Option */}
-                    <div className="landing-role-card supervisor-card">
-                        <div className="role-header">
-                            <div>
-                                <h3>Supervisor Access</h3>
-                                <p className="role-desc">Full dashboard, time approvals & job site management</p>
-                            </div>
-                        </div>
+                <div className="persona-selection-block">
+                    <h3>Select Active Persona / Role</h3>
 
-                        <form onSubmit={handleSupervisorSubmit} className="landing-pin-form">
-                            <label className="pin-label">ENTER SUPERVISOR PIN</label>
-                            <div className="pin-input-group">
-                                <input
-                                    type="password"
-                                    className={`landing-pin-input ${error ? 'error' : ''}`}
-                                    placeholder="Enter PIN (e.g. 1234)"
-                                    value={pin}
-                                    maxLength={6}
-                                    onChange={(e) => {
-                                        setPin(e.target.value);
-                                        setError(false);
-                                    }}
-                                />
-                                <button type="submit" className="landing-btn supervisor-btn">
-                                    Login as Supervisor
-                                </button>
-                            </div>
-                            {error && <p className="landing-pin-error">⚠️ Incorrect PIN. Enter 1234 to proceed.</p>}
-                            <div className="demo-pin-pill">Demo PIN: <code>1234</code></div>
-                        </form>
-                    </div>
-
-                    <div className="landing-divider-line">
-                        <span>OR</span>
-                    </div>
-
-                    {/* Employee Option */}
-                    <div className="landing-role-card employee-card">
-                        <div className="role-header">
-                            <div>
-                                <h3>Employee Access</h3>
-                                <p className="role-desc">Clock in/out on field jobs & view personal timesheets</p>
-                            </div>
-                        </div>
-
-                        <div className="landing-employee-action">
-                            <button
-                                type="button"
-                                className="landing-btn employee-btn"
-                                onClick={onEmployeeLogin}
+                    <div className="persona-grid">
+                        {users.map((u) => (
+                            <div
+                                key={u.id}
+                                className={`persona-card ${selectedUser?.id === u.id ? 'active' : ''}`}
+                                onClick={() => handleUserClick(u)}
                             >
-                                Enter Site as Employee →
+                                <div className="persona-card-top">
+                                    <span className="user-avatar-lg">{u.avatar}</span>
+                                    <span className={`role-badge ${u.role}`}>
+                                        {u.role.replace('_', ' ').toUpperCase()}
+                                    </span>
+                                </div>
+                                <h4 className="persona-name">{u.name}</h4>
+                                <p className="persona-title">{u.title}</p>
+                                <p className="persona-email">{u.email}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* PIN Prompt Modal for Admin/Supervisor personas */}
+                {selectedUser && (
+                    <div className="pin-prompt-box">
+                        <h4>🔒 Authorization PIN for {selectedUser.name}</h4>
+                        <p className="pin-hint">Enter demo PIN <code>1234</code> to access T29 controls.</p>
+
+                        <div className="pin-input-row">
+                            <input
+                                type="password"
+                                className={`pin-input ${pinError ? 'error' : ''}`}
+                                placeholder="PIN (1234)"
+                                value={pin}
+                                maxLength={6}
+                                onChange={(e) => {
+                                    setPin(e.target.value);
+                                    setPinError(false);
+                                }}
+                                onKeyDown={(e) => e.key === 'Enter' && handlePinSubmit()}
+                                autoFocus
+                            />
+                            <button className="btn-dark" onClick={handlePinSubmit}>
+                                Enter as {selectedUser.name}
+                            </button>
+                            <button className="btn-ghost" onClick={() => setSelectedUser(null)}>
+                                Cancel
                             </button>
                         </div>
+                        {pinError && <p className="pin-error-msg">Incorrect PIN. Please use 1234.</p>}
                     </div>
-                </div>
+                )}
 
                 <div className="landing-footer-info">
-                    <span> CrewClock Geofenced Time & Location Tracking System</span>
+                    <p>
+                        💡 <strong>Prototype Info:</strong> No live API backend required for this demo build. All time entries, geofences, map pickers, edit justification audit logs, and PTO safety workflows function live in local session memory.
+                    </p>
                 </div>
             </div>
         </div>
