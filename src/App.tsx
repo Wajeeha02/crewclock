@@ -162,6 +162,7 @@ export default function App() {
                 <JobDispatchPanel
                   jobs={store.jobs}
                   users={store.users}
+                  entries={store.entries}
                   onAddJob={store.addJob}
                   onUpdateJob={store.updateJob}
                   onDeleteJob={store.deleteJob}

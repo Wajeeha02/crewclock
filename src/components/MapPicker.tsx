@@ -167,7 +167,7 @@ export default function MapPicker({ lat, lng, radius, onLocationSelect, height =
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
                     <button type="submit" className="btn-dark-sm" disabled={searching}>
-                        {searching ? 'Searching...' : '🔍 Search Map'}
+                        {searching ? 'Searching...' : ' Search Map'}
                     </button>
                 </form>
 

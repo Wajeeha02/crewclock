@@ -75,6 +75,7 @@ export interface Job {
     assignedCrewIds: string[];
     segments: JobSegment[];
     dispatchNotes?: string;
+    attachments?: { id: string; name: string }[];
     status: 'active' | 'scheduled' | 'completed';
 }
 

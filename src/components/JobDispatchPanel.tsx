@@ -11,6 +11,7 @@ interface JobDispatchPanelProps {
     onDeleteJob: (id: string) => void;
     onResetJobs: () => void;
     canManageJobs: boolean;
+    entries: import('../types').TimeEntry[];
 }
 
 export default function JobDispatchPanel({
@@ -21,6 +22,7 @@ export default function JobDispatchPanel({
     onDeleteJob,
     onResetJobs,
     canManageJobs,
+    entries,
 }: JobDispatchPanelProps) {
     const [selectedJobId, setSelectedJobId] = useState<string>(jobs[0]?.id || 'j1');
     const [showAddModal, setShowAddModal] = useState(false);
@@ -40,6 +42,17 @@ export default function JobDispatchPanel({
     // Editing Job State
     const [isEditing, setIsEditing] = useState(false);
     const selectedJob = jobs.find((j) => j.id === selectedJobId) || jobs[0];
+
+    // Calculate Hours and Costs for selected job
+    const jobEntries = entries.filter(e => e.jobId === selectedJob?.id && e.end !== null);
+    const totalMs = jobEntries.reduce((sum, e) => sum + (new Date(e.end!).getTime() - new Date(e.start).getTime()), 0);
+    const totalHours = totalMs / 3600000;
+    const totalCost = jobEntries.reduce((sum, e) => {
+        const u = users.find(user => user.id === e.userId);
+        const rate = u?.hourlyRate || 0;
+        const ms = new Date(e.end!).getTime() - new Date(e.start).getTime();
+        return sum + (ms / 3600000) * rate;
+    }, 0);
 
     const handleCreateJob = (e: React.FormEvent) => {
         e.preventDefault();
@@ -179,7 +192,7 @@ export default function JobDispatchPanel({
                         {/* Interactive Leaflet Map Picker */}
                         <div className="dispatch-map-container-card">
                             <h4 className="map-card-title">
-                                🗺️ Geofence Boundary Map Picker ({selectedJob.radius}m radius)
+                                Geofence Boundary Map Picker ({selectedJob.radius}m radius)
                             </h4>
                             <MapPicker
                                 lat={selectedJob.lat}
@@ -199,6 +212,18 @@ export default function JobDispatchPanel({
                             <div className="job-editor-card">
                                 <h4>Edit Job Site Settings</h4>
                                 <div className="edit-form-grid">
+                                    <div className="edit-row">
+                                        <label>Job Site Name</label>
+                                        <input
+                                            type="text"
+                                            className="edit-input"
+                                            value={selectedJob.name}
+                                            onChange={(e) =>
+                                                onUpdateJob(selectedJob.id, { name: e.target.value })
+                                            }
+                                        />
+                                    </div>
+
                                     <div className="edit-row">
                                         <label>Address</label>
                                         <input
@@ -283,6 +308,14 @@ export default function JobDispatchPanel({
                                     <p className="dispatch-notes-quote">
                                         "{selectedJob.dispatchNotes || 'No specific dispatch notes.'}"
                                     </p>
+                                </div>
+
+                                <div className="info-card">
+                                    <h5>Job Cost & Hours Tracked</h5>
+                                    <div style={{ marginTop: '8px' }}>
+                                        <p><strong>Total Hours:</strong> {totalHours.toFixed(2)} hrs</p>
+                                        <p><strong>Total Labor Cost:</strong> ${totalCost.toFixed(2)}</p>
+                                    </div>
                                 </div>
                             </div>
                         )}

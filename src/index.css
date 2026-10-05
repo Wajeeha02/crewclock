@@ -203,7 +203,7 @@ body {
 
 .persona-dropdown {
   background-color: rgba(255, 255, 255, 0.15);
-  color: #ffffff;
+  color: #064e3b;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 8px;
   padding: 8px 10px;
@@ -1511,7 +1511,9 @@ body {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .checking-text {
