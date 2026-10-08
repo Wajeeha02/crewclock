@@ -284,24 +284,29 @@ export default function ContractorPortal({
                     <span className="section-label">Your Logged Unit History</span>
                 </div>
 
-                <div className="entries-list-flat">
+                <div className="timesheet-card-grid">
                     {contractorLogs
                         .filter((l) => l.contractorId === currentUser.id)
                         .map((l) => (
-                            <div key={l.id} className="entry-row">
-                                <div className="entry-row-today">{formatDate(l.start)}</div>
-                                <div className="entry-row-info">
-                                    <strong>{l.equipmentUnit}</strong>
-                                    <span>
-                                        {formatTime(l.start)} – {formatTime(l.end)} · "{l.workDescription}"
-                                    </span>
+                            <div key={l.id} className="timesheet-card">
+                                <div className="card-header">
+                                    <div className="card-date-time">
+                                        <span className="card-date">{formatDate(l.start)}</span>
+                                        <span className="card-time">{formatTime(l.start)} – {formatTime(l.end)}</span>
+                                    </div>
+                                    <div className="card-status-badge">
+                                        {l.validatedBySupervisor ? (
+                                            <span className="badge approved">✓ Validated</span>
+                                        ) : (
+                                            <span className="badge pending">Pending</span>
+                                        )}
+                                    </div>
                                 </div>
-                                <div className="entry-row-right">
-                                    {l.validatedBySupervisor ? (
-                                        <span className="synced-label">✓ Validated</span>
-                                    ) : (
-                                        <span className="pending-label">Pending Verification</span>
-                                    )}
+                                <div className="card-body">
+                                    <div className="card-job">
+                                        <strong>{l.equipmentUnit}</strong>
+                                    </div>
+                                    <div className="card-note">"{l.workDescription}"</div>
                                 </div>
                             </div>
                         ))}

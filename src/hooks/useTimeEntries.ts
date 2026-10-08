@@ -3,6 +3,72 @@ import type { TimeEntry, Job, UserProfile, PTORequest, ContractorUnitLog, WorkTy
 
 const API_BASE = 'http://127.0.0.1:5000/api';
 
+const OFFLINE_QUEUE_KEY = 'clock_offline_queue';
+
+interface OfflineRequest {
+    id: string;
+    url: string;
+    method: string;
+    body?: any;
+    timestamp: number;
+}
+
+export async function syncOfflineQueue() {
+    const queueJson = localStorage.getItem(OFFLINE_QUEUE_KEY);
+    if (!queueJson) return;
+    try {
+        const queue: OfflineRequest[] = JSON.parse(queueJson);
+        if (queue.length === 0) return;
+        
+        console.log(`Syncing ${queue.length} offline actions...`);
+        const remainingQueue: OfflineRequest[] = [];
+        
+        for (const req of queue) {
+            try {
+                const options: RequestInit = {
+                    method: req.method,
+                    headers: { 'Content-Type': 'application/json' }
+                };
+                if (req.body) options.body = JSON.stringify(req.body);
+                const res = await fetch(req.url, options);
+                if (!res.ok) throw new Error('API Error');
+            } catch (e) {
+                remainingQueue.push(req);
+            }
+        }
+        
+        localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(remainingQueue));
+    } catch (e) {
+        console.error("Failed to sync offline queue", e);
+    }
+}
+
+async function apiFetch(url: string, method: string, body?: any) {
+    if (navigator.onLine) {
+        try {
+            const options: RequestInit = {
+                method,
+                headers: { 'Content-Type': 'application/json' }
+            };
+            if (body) options.body = JSON.stringify(body);
+            
+            const res = await fetch(url, options);
+            if (!res.ok) throw new Error('API Error');
+            return;
+        } catch (e) {
+            console.warn("Network fetch failed, queueing offline");
+        }
+    } else {
+        console.warn("Currently offline, queueing request");
+    }
+    
+    const queueJson = localStorage.getItem(OFFLINE_QUEUE_KEY);
+    const queue: OfflineRequest[] = queueJson ? JSON.parse(queueJson) : [];
+    queue.push({ id: Math.random().toString(), url, method, body, timestamp: Date.now() });
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+}
+
+
 export function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
     const R = 6371000;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -70,6 +136,14 @@ export function useTimeEntries() {
         loadData();
     }, []);
 
+
+    useEffect(() => {
+        const handleOnline = () => syncOfflineQueue();
+        window.addEventListener('online', handleOnline);
+        if (navigator.onLine) syncOfflineQueue();
+        return () => window.removeEventListener('online', handleOnline);
+    }, []);
+
     useEffect(() => {
         if (currentUser) {
             localStorage.setItem('clock_active_user_id', currentUser.id);
@@ -103,12 +177,7 @@ export function useTimeEntries() {
         // Optimistic UI update
         setEntries(prev => [newEntry, ...prev]);
         
-        try {
-            await fetch(`${API_BASE}/time_entries`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newEntry)
-            });
-        } catch (e) { console.error(e); }
+        await apiFetch(`${API_BASE}/time_entries`, 'POST', newEntry);
     };
 
     const clockOut = async (targetUserId: string = currentUser?.id || '', notes = '') => {
@@ -118,12 +187,7 @@ export function useTimeEntries() {
         const updated = { ...entry, end: new Date().toISOString(), notes: notes || entry.notes };
         setEntries(prev => prev.map(e => e.id === entry.id ? updated : e));
         
-        try {
-            await fetch(`${API_BASE}/time_entries/${entry.id}`, {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ end: updated.end, notes: updated.notes })
-            });
-        } catch (e) { console.error(e); }
+        await apiFetch(`${API_BASE}/time_entries/${entry.id}`, 'PUT', { end: updated.end, notes: updated.notes });
     };
 
     const editEntryWithJustification = async (entryId: string, newStart: string, newEnd: string | null, justification: string, editedByUserId: string, editedByUserName: string) => {
@@ -135,74 +199,42 @@ export function useTimeEntries() {
         const updated = { ...entry, start: newStart, end: newEnd, locationFlag: 'manual_edit' as LocationFlag, supervisorStatus: 'approved' as const, editHistory: updatedHistory };
         
         setEntries(prev => prev.map(e => e.id === entryId ? updated : e));
-        try {
-            await fetch(`${API_BASE}/time_entries/${entryId}`, {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updated)
-            });
-        } catch (e) { console.error(e); }
+        await apiFetch(`${API_BASE}/time_entries/${entryId}`, 'PUT', updated);
     };
 
     const approveEntry = async (entryId: string, approvedByUserId: string) => {
         const approvedAt = new Date().toISOString();
         setEntries(prev => prev.map(e => e.id === entryId ? { ...e, supervisorStatus: 'approved', approvedBy: approvedByUserId, approvedAt } : e));
-        try {
-            await fetch(`${API_BASE}/time_entries/${entryId}`, {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ supervisorStatus: 'approved', approvedBy: approvedByUserId, approvedAt })
-            });
-        } catch(e) { console.error(e); }
+        await apiFetch(`${API_BASE}/time_entries/${entryId}`, 'PUT', { supervisorStatus: 'approved', approvedBy: approvedByUserId, approvedAt });
     };
 
     const rejectEntry = async (entryId: string) => {
         setEntries(prev => prev.map(e => e.id === entryId ? { ...e, supervisorStatus: 'rejected' } : e));
-        try {
-            await fetch(`${API_BASE}/time_entries/${entryId}`, {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ supervisorStatus: 'rejected' })
-            });
-        } catch(e) { console.error(e); }
+        await apiFetch(`${API_BASE}/time_entries/${entryId}`, 'PUT', { supervisorStatus: 'rejected' });
     };
 
     const deleteEntry = async (entryId: string) => {
         setEntries(prev => prev.filter(e => e.id !== entryId));
-        try {
-            await fetch(`${API_BASE}/time_entries/${entryId}`, { method: 'DELETE' });
-        } catch(e) { console.error(e); }
+        await apiFetch(`${API_BASE}/time_entries/${entryId}`, 'DELETE');
     };
 
     const requestPTO = async (request: Omit<PTORequest, 'id' | 'status'>) => {
         const newReq: PTORequest = { id: `pto_${Date.now()}`, ...request, status: 'pending' };
         setPtoRequests(prev => [newReq, ...prev]);
-        try {
-            await fetch(`${API_BASE}/pto_requests`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newReq)
-            });
-        } catch(e) { console.error(e); }
+        await apiFetch(`${API_BASE}/pto_requests`, 'POST', newReq);
     };
 
     const reviewPTO = async (id: string, status: 'approved' | 'denied', notes: string) => {
         const reviewedBy = currentUser?.id;
         const reviewedAt = new Date().toISOString();
         setPtoRequests(prev => prev.map(r => r.id === id ? { ...r, status, supervisorNotes: notes, reviewedBy, reviewedAt } : r));
-        try {
-            await fetch(`${API_BASE}/pto_requests/${id}`, {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status, supervisorNotes: notes, reviewedBy, reviewedAt })
-            });
-        } catch(e) { console.error(e); }
+        await apiFetch(`${API_BASE}/pto_requests/${id}`, 'PUT', { status, supervisorNotes: notes, reviewedBy, reviewedAt });
     };
 
     const startContractorUnitLog = async (contractorId: string, contractorName: string, companyName: string, equipmentId: string, equipmentUnit: string, desc: string) => {
         const newLog: ContractorUnitLog = { id: `clog_${Date.now()}`, contractorId, contractorName, companyName, equipmentId, equipmentUnit, start: new Date().toISOString(), end: null, workDescription: desc, validatedBySupervisor: false };
         setContractorLogs(prev => [newLog, ...prev]);
-        try {
-            await fetch(`${API_BASE}/contractor_logs`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newLog)
-            });
-        } catch(e) { console.error(e); }
+        await apiFetch(`${API_BASE}/contractor_logs`, 'POST', newLog);
     };
 
     const switchContractorUnitLog = async (currentLogId: string, newEquipmentId: string, newEquipmentUnit: string, desc: string) => {
@@ -220,59 +252,35 @@ export function useTimeEntries() {
             return [nextLog, ...updated];
         });
         
-        try {
-            await fetch(`${API_BASE}/contractor_logs/${currentLogId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ end: endIso }) });
-            await fetch(`${API_BASE}/contractor_logs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nextLog) });
-        } catch(e) { console.error(e); }
+        await apiFetch(`${API_BASE}/contractor_logs/${currentLogId}`, 'PUT', { end: endIso });
+        await apiFetch(`${API_BASE}/contractor_logs`, 'POST', nextLog);
     };
 
     const endContractorUnitLog = async (logId: string, desc: string) => {
         const endIso = new Date().toISOString();
         setContractorLogs(prev => prev.map(l => l.id === logId ? { ...l, end: endIso, workDescription: desc || l.workDescription } : l));
-        try {
-            await fetch(`${API_BASE}/contractor_logs/${logId}`, {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ end: endIso, workDescription: desc })
-            });
-        } catch(e) { console.error(e); }
+        await apiFetch(`${API_BASE}/contractor_logs/${logId}`, 'PUT', { end: endIso, workDescription: desc });
     };
 
     const validateContractorLog = async (logId: string, notes: string) => {
         setContractorLogs(prev => prev.map(l => l.id === logId ? { ...l, validatedBySupervisor: true, validationNotes: notes } : l));
-        try {
-            await fetch(`${API_BASE}/contractor_logs/${logId}`, {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ validatedBySupervisor: true, validationNotes: notes })
-            });
-        } catch(e) { console.error(e); }
+        await apiFetch(`${API_BASE}/contractor_logs/${logId}`, 'PUT', { validatedBySupervisor: true, validationNotes: notes });
     };
 
     const addJob = async (newJob: Omit<Job, 'id'>) => {
         const created: Job = { id: `j_${Date.now()}`, ...newJob };
         setJobs(prev => [...prev, created]);
-        try {
-            await fetch(`${API_BASE}/jobs`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(created)
-            });
-        } catch(e) { console.error(e); }
+        await apiFetch(`${API_BASE}/jobs`, 'POST', created);
     };
 
     const updateJob = async (id: string, changes: Partial<Job>) => {
         setJobs(prev => prev.map(j => j.id === id ? { ...j, ...changes } : j));
-        try {
-            await fetch(`${API_BASE}/jobs/${id}`, {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(changes)
-            });
-        } catch(e) { console.error(e); }
+        await apiFetch(`${API_BASE}/jobs/${id}`, 'PUT', changes);
     };
 
     const deleteJob = async (id: string) => {
         setJobs(prev => prev.filter(j => j.id !== id));
-        try {
-            await fetch(`${API_BASE}/jobs/${id}`, { method: 'DELETE' });
-        } catch(e) { console.error(e); }
+        await apiFetch(`${API_BASE}/jobs/${id}`, 'DELETE');
     };
 
     const resetJobs = async () => {

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { TimeEntry, Job, UserProfile } from '../types';
 import { diffMs, hoursDecimal } from '../utils/time';
 import JustificationModal from './JustificationModal';
+import { generatePayrollCSV } from '../utils/payrollExport';
 
 interface SupervisorPanelProps {
     currentUser: UserProfile;
@@ -93,8 +94,15 @@ export default function SupervisorPanel({
                     <span className="section-eyebrow">T29 MANAGEMENT & AUDIT CONTROL</span>
                     <h2>Supervisor Exception & Payroll Dashboard</h2>
                 </div>
-                <div className="role-permission-pill">
-                    🔑 Current Permission Level: <strong>{currentUser.role.replace('_', ' ').toUpperCase()}</strong>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    {canEditAndApprove && (
+                        <button className="btn-dark" onClick={() => generatePayrollCSV(entries, users)}>
+                            ⬇ Export Payroll (CSV)
+                        </button>
+                    )}
+                    <div className="role-permission-pill" style={{ margin: 0 }}>
+                        🔑 Current Permission Level: <strong>{currentUser.role.replace('_', ' ').toUpperCase()}</strong>
+                    </div>
                 </div>
             </div>
 

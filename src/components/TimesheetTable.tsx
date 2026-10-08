@@ -91,54 +91,57 @@ export default function TimesheetTable({ entries, jobs, currentUser }: Timesheet
                         <p>No time entries found for this period. Clock in to begin recording hours.</p>
                     </div>
                 ) : (
-                    <div className="entries-list-flat">
+                    <div className="timesheet-card-grid">
                         {completed.map((e) => (
                             <div
                                 key={e.id}
-                                className={`entry-row ${e.locationFlag ? 'entry-row-flagged' : ''}`}
+                                className={`timesheet-card ${e.locationFlag ? 'flagged-card' : ''}`}
                             >
-                                <div className="entry-row-today">{formatDate(e.start)}</div>
-
-                                <div className="entry-row-info">
-                                    <div className="entry-job-name-row">
-                                        <span className="job-dot-sm" style={{ backgroundColor: getJobColor(e.jobId) }} />
-                                        <strong>{getJobName(e.jobId)}</strong>
-                                        <span className="user-tag-small">👤 {e.userName}</span>
-                                        {e.workType === 'field' && <span className="entry-field-tag">Field Mode</span>}
+                                <div className="card-header">
+                                    <div className="card-date-time">
+                                        <span className="card-date">{formatDate(e.start)}</span>
+                                        <span className="card-time">{formatTime(e.start)} – {formatTime(e.end!)}</span>
                                     </div>
-
-                                    <span>
-                                        Cost Code: <code>{e.segment}</code> · {formatTime(e.start)} – {formatTime(e.end!)}
-                                    </span>
-
-                                    {e.locationFlag && (
-                                        <span className="entry-flag-text">
-                                            Flagged: {e.locationFlag === 'outside_radius' ? 'Outside Geofence Radius' : e.locationFlag === 'manual_edit' ? 'Edited with Justification' : 'GPS Disabled'}
-                                        </span>
-                                    )}
-
-                                    {e.notes && <span className="entry-note-text">"{e.notes}"</span>}
-
-                                    {e.editHistory.length > 0 && (
-                                        <span className="justification-audit-text">
-                                            ✏️ Supervisor Justification: "{e.editHistory[0].justification}" (by {e.editHistory[0].editedByUserName})
-                                        </span>
-                                    )}
+                                    <div className="card-status-badge">
+                                        {e.supervisorStatus === 'approved' && (
+                                            <span className="badge approved">✓ Approved</span>
+                                        )}
+                                        {e.supervisorStatus === 'pending' && (
+                                            <span className="badge pending">⏳ Pending</span>
+                                        )}
+                                        {e.supervisorStatus === 'rejected' && (
+                                            <span className="badge rejected">✕ Rejected</span>
+                                        )}
+                                    </div>
                                 </div>
+                                <div className="card-body">
+                                    <div className="card-job">
+                                        <span className="job-dot" style={{ backgroundColor: getJobColor(e.jobId) }} />
+                                        <strong>{getJobName(e.jobId)}</strong>
+                                    </div>
+                                    <div className="card-user">
+                                        👤 {e.userName}
+                                        {e.workType === 'field' && <span className="tag field">Field Mode</span>}
+                                    </div>
+                                    <div className="card-cost-code">
+                                        Cost Code: <code>{e.segment}</code>
+                                    </div>
+                                    
+                                    {e.locationFlag && (
+                                        <div className="card-alert">
+                                            ⚠️ Flagged: {e.locationFlag === 'outside_radius' ? 'Outside Geofence Radius' : e.locationFlag === 'manual_edit' ? 'Edited with Justification' : 'GPS Disabled'}
+                                        </div>
+                                    )}
+                                    {e.notes && <div className="card-note">"{e.notes}"</div>}
+                                    {e.editHistory.length > 0 && (
+                                        <div className="card-audit">
+                                            ✏️ Supervisor Justification: "{e.editHistory[0].justification}" (by {e.editHistory[0].editedByUserName})
+                                        </div>
+                                    )}
 
-                                <div className="entry-row-right">
-                                    <span className="entry-hours-label">
-                                        {hoursDecimal(diffMs(e.start, e.end!))} h
-                                    </span>
-                                    {e.supervisorStatus === 'approved' && (
-                                        <span className="synced-label">✓ Approved</span>
-                                    )}
-                                    {e.supervisorStatus === 'pending' && (
-                                        <span className="pending-label">⏳ Pending</span>
-                                    )}
-                                    {e.supervisorStatus === 'rejected' && (
-                                        <span className="rejected-label">✕ Rejected</span>
-                                    )}
+                                    <div className="card-hours">
+                                        <strong>{hoursDecimal(diffMs(e.start, e.end!))} h</strong> Total
+                                    </div>
                                 </div>
                             </div>
                         ))}
