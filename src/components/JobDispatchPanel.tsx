@@ -1,7 +1,8 @@
 // src/components/JobDispatchPanel.tsx
 import { useState } from 'react';
-import type { Job, UserProfile, JobSegment } from '../types';
+import type { Job, UserProfile, JobSegment, Shift } from '../types';
 import MapPicker from './MapPicker';
+import ScheduleCalendar from './ScheduleCalendar';
 
 interface JobDispatchPanelProps {
     jobs: Job[];
@@ -12,6 +13,8 @@ interface JobDispatchPanelProps {
     onResetJobs: () => void;
     canManageJobs: boolean;
     entries: import('../types').TimeEntry[];
+    shifts: Shift[];
+    onAddShift: (shift: Omit<Shift, 'id'>) => void;
 }
 
 export default function JobDispatchPanel({
@@ -23,9 +26,12 @@ export default function JobDispatchPanel({
     onResetJobs,
     canManageJobs,
     entries,
+    shifts,
+    onAddShift,
 }: JobDispatchPanelProps) {
     const [selectedJobId, setSelectedJobId] = useState<string>(jobs[0]?.id || 'j1');
     const [showAddModal, setShowAddModal] = useState(false);
+    const [viewMode, setViewMode] = useState<'map' | 'calendar'>('map');
 
     // New Job Form State
     const [name, setName] = useState('');
@@ -107,21 +113,30 @@ export default function JobDispatchPanel({
                     <span className="section-eyebrow">JOB DISPATCH & GEOFENCING SYSTEM</span>
                     <h2>Location & Crew Dispatch Hub</h2>
                 </div>
-                {canManageJobs && (
-                    <div className="btn-group">
-                        <button className="btn-dark" onClick={() => setShowAddModal(true)}>
-                            + Dispatch New Job Site
-                        </button>
-                        <button className="btn-ghost-sm" onClick={onResetJobs}>
-                            ↺ Reset Standard Demo Jobs
-                        </button>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <div className="tab-switcher" style={{ display: 'flex', backgroundColor: 'var(--bg-main)', borderRadius: '8px', padding: '4px', border: '1px solid var(--border-color)' }}>
+                        <button className={viewMode === 'map' ? 'btn-dark' : 'btn-ghost-sm'} onClick={() => setViewMode('map')} style={{ padding: '4px 12px', fontSize: '12px' }}>Map & Details</button>
+                        <button className={viewMode === 'calendar' ? 'btn-dark' : 'btn-ghost-sm'} onClick={() => setViewMode('calendar')} style={{ padding: '4px 12px', fontSize: '12px' }}>Shift Calendar</button>
                     </div>
-                )}
+                    {canManageJobs && (
+                        <div className="btn-group">
+                            <button className="btn-dark" onClick={() => setShowAddModal(true)}>
+                                + Dispatch New Job Site
+                            </button>
+                            <button className="btn-ghost-sm" onClick={onResetJobs}>
+                                ↺ Reset Standard Demo Jobs
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
 
-            <div className="dispatch-layout">
-                {/* Left Column: Job Selector List */}
-                <div className="dispatch-sidebar-list">
+            {viewMode === 'calendar' ? (
+                <ScheduleCalendar jobs={jobs} users={users} shifts={shifts} onAddShift={onAddShift} />
+            ) : (
+                <div className="dispatch-layout">
+                    {/* Left Column: Job Selector List */}
+                    <div className="dispatch-sidebar-list">
                     <span className="sidebar-section-title">Dispatched Job Sites ({jobs.length})</span>
                     <div className="job-cards-stack">
                         {jobs.map((j) => (
@@ -322,6 +337,7 @@ export default function JobDispatchPanel({
                     </div>
                 )}
             </div>
+            )}
 
             {/* Modal: Dispatch New Job */}
             {showAddModal && (

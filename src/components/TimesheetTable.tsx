@@ -1,7 +1,7 @@
 // src/components/TimesheetTable.tsx
 import { useNavigate } from 'react-router-dom';
 import type { TimeEntry, Job, UserProfile } from '../types';
-import { diffMs, hoursDecimal } from '../utils/time';
+import { diffMs, hoursDecimal, isCurrentWeek } from '../utils/time';
 
 interface TimesheetTableProps {
     entries: TimeEntry[];
@@ -25,6 +25,19 @@ export default function TimesheetTable({ entries, jobs, currentUser }: Timesheet
         .reduce((sum, e) => sum + diffMs(e.start, e.end!), 0);
 
     const pendingCount = completed.filter((e) => e.supervisorStatus === 'pending').length;
+
+    // Overtime Alert Logic
+    const currentWeekEntries = completed.filter(e => isCurrentWeek(e.start));
+    const hoursByUser: Record<string, { name: string, hours: number }> = {};
+    currentWeekEntries.forEach(e => {
+        const h = diffMs(e.start, e.end!) / 3600000;
+        if (!hoursByUser[e.userId]) {
+            hoursByUser[e.userId] = { name: e.userName, hours: 0 };
+        }
+        hoursByUser[e.userId].hours += h;
+    });
+
+    const overtimeAlerts = Object.values(hoursByUser).filter(u => u.hours >= 40);
 
     const getJobName = (jId: string) => jobs.find((j) => j.id === jId)?.name || 'Unknown Job';
     const getJobColor = (jId: string) => jobs.find((j) => j.id === jId)?.color || '#888';
@@ -75,6 +88,19 @@ export default function TimesheetTable({ entries, jobs, currentUser }: Timesheet
                 <p className="ts-auto-note">
                     ✓ All entries are timestamped and verified against geofence coordinates.
                 </p>
+                
+                {overtimeAlerts.length > 0 && (
+                    <div className="overtime-alerts" style={{ marginTop: '16px', padding: '12px', backgroundColor: 'rgba(220, 38, 38, 0.1)', border: '1px solid var(--accent-red)', borderRadius: '8px', color: 'var(--accent-red)' }}>
+                        <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>⚠️ Overtime Alert (Week of {weekLabel})</h4>
+                        <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px' }}>
+                            {overtimeAlerts.map(a => (
+                                <li key={a.name}>
+                                    <strong>{a.name}</strong> is approaching or exceeding overtime limits ({a.hours.toFixed(2)}h)
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
             </div>
 
             <div className="ts-divider" />

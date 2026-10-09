@@ -98,6 +98,7 @@ export function useTimeEntries() {
     const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
     const [entries, setEntries] = useState<TimeEntry[]>([]);
     const [jobs, setJobs] = useState<Job[]>([]);
+    const [shifts, setShifts] = useState<import('../types').Shift[]>([]);
     const [ptoRequests, setPtoRequests] = useState<PTORequest[]>([]);
     const [contractorLogs, setContractorLogs] = useState<ContractorUnitLog[]>([]);
     const [equipmentList, setEquipmentList] = useState<EquipmentUnit[]>([]);
@@ -294,9 +295,16 @@ export function useTimeEntries() {
     const pendingExceptionsCount = entries.filter(e => e.supervisorStatus === 'pending' || e.locationFlag !== null).length +
         ptoRequests.filter(r => r.status === 'pending').length;
 
+    const addShift = (shift: Omit<import('../types').Shift, 'id'>) => {
+        const newShift = { ...shift, id: `shift_${Date.now()}` };
+        setShifts(prev => [...prev, newShift]);
+    };
+
     return {
         users,
         currentUser,
+        shifts,
+        addShift,
         switchActiveUser,
         entries,
         activeEntry,

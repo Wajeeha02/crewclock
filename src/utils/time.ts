@@ -13,3 +13,12 @@ export const formatHMS = (ms: number): string => {
 export const hoursDecimal = (ms: number): string => (ms / 3600000).toFixed(2);
 
 export const dayKey = (iso: string): string => new Date(iso).toLocaleDateString();
+
+export const isCurrentWeek = (iso: string): boolean => {
+    const date = new Date(iso);
+    const now = new Date();
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    return date >= weekStart && date < weekEnd;
+};

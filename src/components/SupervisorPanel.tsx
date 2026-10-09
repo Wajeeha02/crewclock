@@ -101,7 +101,7 @@ export default function SupervisorPanel({
                         </button>
                     )}
                     <div className="role-permission-pill" style={{ margin: 0 }}>
-                        🔑 Current Permission Level: <strong>{currentUser.role.replace('_', ' ').toUpperCase()}</strong>
+                        Current Permission Level: <strong>{currentUser.role.replace('_', ' ').toUpperCase()}</strong>
                     </div>
                 </div>
             </div>

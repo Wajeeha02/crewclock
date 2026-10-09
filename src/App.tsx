@@ -163,6 +163,8 @@ export default function App() {
                   jobs={store.jobs}
                   users={store.users}
                   entries={store.entries}
+                  shifts={store.shifts}
+                  onAddShift={store.addShift}
                   onAddJob={store.addJob}
                   onUpdateJob={store.updateJob}
                   onDeleteJob={store.deleteJob}

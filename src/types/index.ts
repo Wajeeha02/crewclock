@@ -63,6 +63,15 @@ export interface JobSegment {
     code: string;
 }
 
+export interface Shift {
+    id: string;
+    jobId: string;
+    assignedCrewIds: string[];
+    date: string; // YYYY-MM-DD
+    startTime: string; // HH:mm
+    endTime: string; // HH:mm
+}
+
 export interface Job {
     id: string;
     name: string;
